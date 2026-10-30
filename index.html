@@ -51,14 +51,16 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;ma
     </div>
     <button class="btn primary" type="submit" id="adminLoginBtn">Login Admin</button>
   </form>
-  <div id="adminLoginStatus" class="status"></div>
+  <div id="adminLoginStatus" class="status"></div><button class="btn ghost hidden" type="button" id="adminLogoutBtn">
+  Logout Admin
+  </button>
 </section>
 <div class="layout">
   <section class="card">
     <div class="cardhead"><h3>🔎 Hasil Pencarian</h3><span class="muted" id="resultLabel">Siap mencari</span></div>
     <div id="results" class="results"><div class="empty">Masukkan kata kunci atau pertanyaan untuk mulai mencari.<br><small>Contoh: “Apa yang harus dilakukan sebelum bekerja?”</small></div></div>
   </section>
-  <aside class="card">
+  <aside class="card" id="adminManagePanel">
     <h3>＋ Kelola Database</h3>
     <form id="questionForm" class="formgrid">
       <input type="hidden" id="editId">
