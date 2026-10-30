@@ -126,8 +126,95 @@ $("searchBtn").onclick=()=>search($("query").value);
 $("query").addEventListener("keydown",e=>{if(e.key==="Enter")search($("query").value)});
 $("clearBtn").onclick=()=>{ $("query").value="";search("")};
 document.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>search(b.dataset.q));
-$("questionForm").onsubmit=e=>{e.preventDefault();const q=$("questionInput").value.trim(),a=$("answerInput").value.trim();if(!q||!a)return;const id=$("editId").value;const item={id:id||uid(),question:q,answer:a,category:$("categoryInput").value.trim(),source:$("sourceInput").value.trim(),updatedAt:new Date().toISOString()};if(id)db=db.map(x=>x.id===id?item:x);else db.unshift(item);persist();e.target.reset();$("editId").value="";$("saveBtn").textContent="Simpan Pertanyaan";$("formStatus").textContent=id?"Pertanyaan diperbarui.":"Pertanyaan berhasil disimpan.";if(lastQuery)search(lastQuery);else search(q)};
-$("cancelEdit").onclick=()=>{$("questionForm").reset();$("editId").value="";$("saveBtn").textContent="Simpan Pertanyaan";$("formStatus").textContent=""};
+
+$("questionForm").onsubmit = async e => {
+  e.preventDefault();
+
+  const q = $("questionInput").value.trim();
+  const a = $("answerInput").value.trim();
+
+  if (!q || !a) return;
+
+  const id = $("editId").value;
+  const config = window.ftSupabaseConfig;
+  const session = window.ftAdminSession;
+
+  if (!config || !session || !session.access_token) {
+    $("formStatus").textContent = "Silakan login admin terlebih dahulu.";
+    return;
+  }
+
+  const itemData = {
+    question: q,
+    answer: a,
+    category: $("categoryInput").value.trim(),
+    source: $("sourceInput").value.trim(),
+    updated_at: new Date().toISOString()
+  };
+
+  $("saveBtn").disabled = true;
+  $("formStatus").textContent = "Menyimpan ke Supabase...";
+
+  try {
+    const url = id
+      ? `${config.url}/rest/v1/qa_entries?id=eq.${encodeURIComponent(id)}`
+      : `${config.url}/rest/v1/qa_entries`;
+
+    const response = await fetch(url, {
+      method: id ? "PATCH" : "POST",
+      headers: {
+        apikey: config.key,
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation"
+      },
+      body: JSON.stringify(itemData)
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || result.msg || result.error_description || "Gagal menyimpan ke Supabase");
+    }
+
+    if (!Array.isArray(result) || result.length === 0) {
+      throw new Error("Supabase tidak mengembalikan data. Periksa izin database.");
+    }
+
+    const saved = result[0];
+
+    const item = {
+      id: saved.id,
+      question: saved.question,
+      answer: saved.answer,
+      category: saved.category || "",
+      source: saved.source || "",
+      updatedAt: saved.updated_at
+    };
+
+    if (id) {
+      db = db.map(x => x.id === id ? item : x);
+    } else {
+      db.unshift(item);
+    }
+
+    persist();
+    e.target.reset();
+    $("editId").value = "";
+    $("saveBtn").textContent = "Simpan Pertanyaan";
+    $("formStatus").textContent = "Berhasil tersimpan ke Supabase!";
+
+    if (lastQuery) search(lastQuery);
+    else search(q);
+
+  } catch (error) {
+    $("formStatus").textContent = "Gagal: " + error.message;
+  } finally {
+    $("saveBtn").disabled = false;
+  }
+};
+
+  $("cancelEdit").onclick=()=>{$("questionForm").reset();$("editId").value="";$("saveBtn").textContent="Simpan Pertanyaan";$("formStatus").textContent=""};
 $("exportBtn").onclick=()=>{const blob=new Blob([JSON.stringify({app:"FT Answer Engine PRO",version:1,exportedAt:new Date().toISOString(),questions:db},null,2)],{type:"application/json"});download(blob,"ft-answer-engine-backup.json")};
 function download(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 $("importJsonBtn").onclick=()=>$("jsonFile").click();
@@ -148,7 +235,10 @@ load();
 (async function connectSupabase() {
   const SUPABASE_URL = "https://axellcuclfrelwimiqgc.supabase.co" ;
   const SUPABASE_KEY = "sb_publishable_BvQDLKdvZMm-HhhXK47kHg_d8bNUPmx" ;
-
+window.ftSupabaseConfig = {
+  url: SUPABASE_URL,
+  key: SUPABASE_KEY
+};
   try {
     const response = await fetch(
       `${SUPABASE_URL}/rest/v1/qa_entries?select=id,question,answer,source,created_at,updated_at`,
