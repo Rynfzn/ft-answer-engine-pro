@@ -209,5 +209,140 @@ load();
   }
 })();
 </script>
+<script>
+(function () {
+  const SUPABASE_URL = "https://axellcuclfrelwimiqgc.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_BvQDLKdvZMm-HhhXK47kHg_d8bNUPmx";
+
+  const loginPanel = document.getElementById("adminLoginPanel");
+  const managePanel = document.getElementById("adminManagePanel");
+  const loginForm = document.getElementById("adminLoginForm");
+  const logoutBtn = document.getElementById("adminLogoutBtn");
+  const statusBox = document.getElementById("adminLoginStatus");
+
+  let adminSession = null;
+
+  window.ftAdminSession = null;
+
+  function showAdmin(session) {
+    adminSession = session;
+    window.ftAdminSession = session;
+
+    loginPanel.classList.add("hidden");
+    managePanel.classList.remove("hidden");
+    logoutBtn.classList.remove("hidden");
+
+    statusBox.textContent = "Login berhasil. Selamat bekerja, Admin!";
+  }
+
+  function showGuest() {
+    adminSession = null;
+    window.ftAdminSession = null;
+
+    loginPanel.classList.remove("hidden");
+    managePanel.classList.add("hidden");
+    logoutBtn.classList.add("hidden");
+  }
+
+  async function getUser(token) {
+    const response = await fetch(
+      SUPABASE_URL + "/auth/v1/user",
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: "Bearer " + token
+        }
+      }
+    );
+
+    if (!response.ok) throw new Error("Sesi login tidak valid");
+
+    return response.json();
+  }
+
+  loginForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+
+    const email = document.getElementById("adminEmail").value.trim();
+    const password = document.getElementById("adminPassword").value;
+
+    const button = document.getElementById("adminLoginBtn");
+
+    button.disabled = true;
+    statusBox.textContent = "Sedang menghubungkan ke Supabase...";
+
+    try {
+      const response = await fetch(
+        SUPABASE_URL + "/auth/v1/token?grant_type=password",
+        {
+          method: "POST",
+          headers: {
+            apikey: SUPABASE_KEY,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ email, password })
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.msg || data.message || data.error_description || "Email atau password salah");
+      }
+
+      sessionStorage.setItem("ft_admin_token", data.access_token);
+
+      showAdmin(data);
+      loginForm.reset();
+
+    } catch (error) {
+      statusBox.textContent = "Login gagal: " + error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  logoutBtn.addEventListener("click", async function () {
+    if (!adminSession) return;
+
+    try {
+      await fetch(SUPABASE_URL + "/auth/v1/logout", {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: "Bearer " + adminSession.access_token
+        }
+      });
+    } catch (error) {
+      console.error("Logout:", error);
+    }
+
+    sessionStorage.removeItem("ft_admin_token");
+    showGuest();
+    statusBox.textContent = "Kamu sudah logout.";
+  });
+
+  async function restoreSession() {
+    showGuest();
+
+    const token = sessionStorage.getItem("ft_admin_token");
+    if (!token) return;
+
+    try {
+      const user = await getUser(token);
+
+      showAdmin({
+        access_token: token,
+        user: user
+      });
+    } catch (error) {
+      sessionStorage.removeItem("ft_admin_token");
+      showGuest();
+    }
+  }
+
+  restoreSession();
+})();
+</script>
 </body>
 </html>
