@@ -287,7 +287,7 @@ window.ftSupabaseConfig = {
 };
   try {
     const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/qa_entries?select=id,question,answer,source,created_at,updated_at`,
+      `${SUPABASE_URL}/rest/v1/qa_entries?select=id,question,answer,category,source,created_at,updated_at`,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -310,7 +310,7 @@ window.ftSupabaseConfig = {
       id: item.id,
       question: item.question,
       answer: item.answer,
-      category: "",
+      category: item.category || "",
       source: item.source || "Supabase",
       updatedAt: item.updated_at
     }));
