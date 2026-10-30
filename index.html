@@ -368,10 +368,22 @@ $("csvFile").onchange = async e => {
       }
     );
 
-    const result = await response.json();
+    const responseText = await response.text();
+console.log("STATUS IMPORT:", response.status);
+console.log("RESPONS IMPORT:", responseText);
+
+let result = [];
+
+try {
+  result = responseText ? JSON.parse(responseText) : [];
+} catch {
+  throw Error("Respons Supabase bukan JSON yang valid: " + responseText);
+}
 
     if (!response.ok) {
-      throw Error(result.message || result.msg || "Gagal mengimpor ke Supabase.");
+  throw Error(
+    "HTTP " + response.status + ": " + responseText
+  );
     }
 
     if (!Array.isArray(result) || result.length !== items.length) {
