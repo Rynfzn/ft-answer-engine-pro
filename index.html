@@ -37,6 +37,21 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;ma
   <div class="stat"><small>Total pertanyaan</small><strong id="countStat">0</strong></div>
   <div class="stat"><small>Hasil ditemukan</small><strong id="resultStat">0</strong></div>
   <div class="stat"><small>Status database</small><strong style="font-size:18px;color:#6ee7b7">Tersimpan lokal</strong></div>
+</section><section class="card" id="adminLoginPanel">
+  <h3>🔐 Login Administrator</h3>
+  <p class="hint">Login untuk mengelola database FT Answer Engine PRO.</p>
+  <form id="adminLoginForm" class="formgrid">
+    <div class="field">
+      <label for="adminEmail">Email Admin</label>
+      <input id="adminEmail" type="email" required placeholder="Masukkan email admin">
+    </div>
+    <div class="field">
+      <label for="adminPassword">Password</label>
+      <input id="adminPassword" type="password" required placeholder="Masukkan password">
+    </div>
+    <button class="btn primary" type="submit" id="adminLoginBtn">Login Admin</button>
+  </form>
+  <div id="adminLoginStatus" class="status"></div>
 </section>
 <div class="layout">
   <section class="card">
