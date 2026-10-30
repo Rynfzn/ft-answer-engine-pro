@@ -315,21 +315,21 @@ window.ftSupabaseConfig = {
       updatedAt: item.updated_at
     }));
 
-    const combined = [...mappedData];
+    const backupKey = "ft-answer-engine-pro-backup";
 
-    localData.forEach(localItem => {
-      if (!combined.some(
-        item => item.question === localItem.question
-      )) {
-        combined.push(localItem);
-      }
-    });
+if (!localStorage.getItem(backupKey)) {
+  localStorage.setItem(
+    backupKey,
+    JSON.stringify(localData)
+  );
+}
 
-    localStorage.setItem(
-      "ft-answer-engine-pro-v1",
-      JSON.stringify(combined)
-    );
+const combined = [...mappedData];
 
+localStorage.setItem(
+  "ft-answer-engine-pro-v1",
+  JSON.stringify(combined)
+);
     console.log("Supabase berhasil terhubung!");
     console.log("Data online:", onlineData.length);
 
