@@ -111,36 +111,64 @@ function similarity(a,b){
   return Math.min(99,Math.round((j*.65+containment*.35+phrase)*100));
 }
 function escapeHtml(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
 function search(q){
-  lastQuery=q.trim();$("query").value=q;$("results").innerHTML="";
-  if(!q.trim()){$("results").innerHTML='<div class="empty">Masukkan kata kunci atau pertanyaan untuk mulai mencari.</div>';$("resultStat").textContent="0";$("resultLabel").textContent="Siap mencari";return}
-  const scored=db.map(item=>({...item,score:Math.max(similarity(q,item.question), similarity(q,item.category||"")*0.55)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,50);
-  $("resultStat").textContent=scored.length;$("resultLabel").textContent=scored.length+" hasil";
-  if(!scored.length){$("results").innerHTML='<div class="empty">Belum ada hasil yang cocok.<br><small>Coba kata kunci lain atau tambahkan pertanyaan ke database.</small></div>';return}
+  lastQuery=q.trim();
+  $("query").value=q;
+  $("results").innerHTML="";
+
+  if(!q.trim()){
+    $("results").innerHTML='<div class="empty">Masukkan kata kunci atau pertanyaan untuk mulai mencari.</div>';
+    $("resultStat").textContent="0";
+    $("resultLabel").textContent="Siap mencari";
+    return;
+  }
+
+  const scored=db
+    .map(item=>({
+      ...item,
+      score:Math.max(
+        similarity(q,item.question),
+        similarity(q,item.category||"")*0.55
+      )
+    }))
+    .filter(x=>x.score>=70)
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,50);
+
+  $("resultStat").textContent=scored.length;
+  $("resultLabel").textContent=scored.length+" hasil";
+
+  if(!scored.length){
+    $("results").innerHTML='<div class="empty">Belum ada jawaban dengan tingkat kecocokan minimal 70%.<br><small>Coba gunakan kata kunci yang lebih spesifik.</small></div>';
+    return;
+  }
+
   $("results").innerHTML = scored.map(x => `
-  <article class="result">
-    <div class="resulttop">
-      <span class="qid">${escapeHtml(x.id || "QUESTION")}</span>
-      <span class="score">${x.score}% MATCH</span>
-    </div>
-    <div class="question">${escapeHtml(x.question)}</div>
-    <div class="answer">${escapeHtml(x.answer)}</div>
-    <div class="tags">
-      ${x.category ? `<span class="tag">${escapeHtml(x.category)}</span>` : ""}
-      ${x.source ? `<span class="tag">Sumber: ${escapeHtml(x.source)}</span>` : ""}
-    </div>
-    <div class="actions">
-      ${window.ftAdminSession && window.ftAdminSession.access_token
-        ? `<button class="btn secondary" onclick="editItem('${x.id}')">Edit</button>`
-        : ""}
-      <button class="btn ghost" onclick="copyAnswer('${x.id}')">Salin jawaban</button>
-      ${window.ftAdminSession && window.ftAdminSession.access_token
-        ? `<button class="btn danger" onclick="deleteItem('${x.id}')">Hapus</button>`
-        : ""}
-    </div>
-  </article>
-`).join("");
+    <article class="result">
+      <div class="resulttop">
+        <span class="qid">${escapeHtml(x.id || "QUESTION")}</span>
+        <span class="score">${x.score}% MATCH</span>
+      </div>
+      <div class="question">${escapeHtml(x.question)}</div>
+      <div class="answer">${escapeHtml(x.answer)}</div>
+      <div class="tags">
+        ${x.category ? `<span class="tag">${escapeHtml(x.category)}</span>` : ""}
+        ${x.source ? `<span class="tag">Sumber: ${escapeHtml(x.source)}</span>` : ""}
+      </div>
+      <div class="actions">
+        ${window.ftAdminSession && window.ftAdminSession.access_token
+          ? `<button class="btn secondary" onclick="editItem('${x.id}')">Edit</button>`
+          : ""}
+        <button class="btn ghost" onclick="copyAnswer('${x.id}')">Salin jawaban</button>
+        ${window.ftAdminSession && window.ftAdminSession.access_token
+          ? `<button class="btn danger" onclick="deleteItem('${x.id}')">Hapus</button>`
+          : ""}
+      </div>
+    </article>
+  `).join("");
 };
+
 window.editItem = id => {
   const session = window.ftAdminSession;
 
