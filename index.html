@@ -127,6 +127,70 @@ $("sampleBtn").onclick=()=>{if(db.length&&!confirm("Tambahkan contoh ke database
 ];const known=new Set(db.map(x=>x.question));samples.forEach(x=>{if(!known.has(x.question))db.push({...x,id:uid()})});persist();$("formStatus").textContent="Contoh demo ditambahkan. Ganti dengan data milikmu.";search(lastQuery||"safety")};
 $("deleteAllBtn").onclick=()=>{if(!confirm("Yakin menghapus SEMUA data di browser ini? Pastikan sudah membuat backup."))return;db=[];persist();search("");$("formStatus").textContent="Semua data lokal dihapus."};
 load();
+</script><script>
+(async function connectSupabase() {
+  const SUPABASE_URL = "https://axellcuclfrelwimiqgc.supabase.co" ;
+  const SUPABASE_KEY = "sb_publishable_BvQDLKdvZMm-HhhXK47kHg_d8bNUPmx" ;
+
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/qa_entries?select=id,question,answer,source,created_at,updated_at`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        }
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Koneksi database gagal: " + response.status);
+    }
+
+    const onlineData = await response.json();
+
+    const localData = JSON.parse(
+      localStorage.getItem("ft-answer-engine-pro-v1") || "[]"
+    );
+
+    const mappedData = onlineData.map(item => ({
+      id: item.id,
+      question: item.question,
+      answer: item.answer,
+      category: "",
+      source: item.source || "Supabase",
+      updatedAt: item.updated_at
+    }));
+
+    const combined = [...mappedData];
+
+    localData.forEach(localItem => {
+      if (!combined.some(
+        item => item.question === localItem.question
+      )) {
+        combined.push(localItem);
+      }
+    });
+
+    localStorage.setItem(
+      "ft-answer-engine-pro-v1",
+      JSON.stringify(combined)
+    );
+
+    console.log("Supabase berhasil terhubung!");
+    console.log("Data online:", onlineData.length);
+
+    if (typeof load === "function") {
+      load();
+      if (typeof search === "function" && lastQuery) {
+        search(lastQuery);
+      }
+    }
+  } catch (error) {
+    console.error("Supabase:", error);
+    console.log("Aplikasi tetap menggunakan data lokal.");
+  }
+})();
 </script>
 </body>
 </html>
