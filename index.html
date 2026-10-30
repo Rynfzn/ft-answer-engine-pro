@@ -261,7 +261,8 @@ load();
   }
 
   loginForm.addEventListener("submit", async function (e) {
-    e.preventDefault();
+  alert("Tombol login berhasil terdeteksi!");
+  e.preventDefault();
 
     const email = document.getElementById("adminEmail").value.trim();
     const password = document.getElementById("adminPassword").value;
