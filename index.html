@@ -307,7 +307,104 @@ $("importJsonBtn").onclick=()=>$("jsonFile").click();
 $("jsonFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const data=JSON.parse(await f.text());const arr=Array.isArray(data)?data:(data.questions||data.items||[]);if(!Array.isArray(arr))throw Error("Format JSON tidak dikenali");let added=0;arr.forEach(x=>{const question=x.question||x.pertanyaan||x.Question||x.soal;const answer=x.answer||x.jawaban||x.Answer;if(question&&answer){db.push({id:uid(),question:String(question),answer:String(answer),category:String(x.category||x.kategori||""),source:String(x.source||x.sumber||"")});added++}});persist();$("formStatus").textContent=`Impor selesai: ${added} pertanyaan.`;if(lastQuery)search(lastQuery)}catch(err){alert("Gagal impor JSON: "+err.message)}e.target.value=""};
 $("importCsvBtn").onclick=()=>$("csvFile").click();
 function parseCSV(text){const rows=[];let row=[],v="",quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'&&quoted&&text[i+1]==='"'){v+='"';i++}else if(c==='"'){quoted=!quoted}else if(c===","&&!quoted){row.push(v);v=""}else if((c==="\n"||c==="\r")&&!quoted){if(c==="\r"&&text[i+1]==="\n")i++;row.push(v);if(row.some(x=>x.trim()))rows.push(row);row=[];v=""}else v+=c}row.push(v);if(row.some(x=>x.trim()))rows.push(row);return rows}
-$("csvFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const rows=parseCSV(await f.text());if(rows.length<2)throw Error("CSV harus memiliki header dan setidaknya satu baris data");const heads=rows.shift().map(x=>norm(x));const idx=(...names)=>heads.findIndex(h=>names.includes(h));const qi=idx("question","pertanyaan","soal"),ai=idx("answer","jawaban"),ci=idx("category","kategori"),si=idx("source","sumber");if(qi<0||ai<0)throw Error("Kolom wajib: question dan answer");let added=0;rows.forEach(r=>{if(r[qi]?.trim()&&r[ai]?.trim()){db.push({id:uid(),question:r[qi].trim(),answer:r[ai].trim(),category:ci>=0?(r[ci]||""):"",source:si>=0?(r[si]||""):""});added++}});persist();$("formStatus").textContent=`Impor CSV selesai: ${added} pertanyaan.`;if(lastQuery)search(lastQuery)}catch(err){alert("Gagal impor CSV: "+err.message)}e.target.value=""};
+$("csvFile").onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+
+  const config = window.ftSupabaseConfig;
+  const session = window.ftAdminSession;
+
+  if (!config || !session || !session.access_token) {
+    alert("Silakan login admin terlebih dahulu.");
+    e.target.value = "";
+    return;
+  }
+
+  try {
+    const rows = parseCSV(await f.text());
+
+    if (rows.length < 2) {
+      throw Error("CSV harus memiliki header dan setidaknya satu baris data.");
+    }
+
+    const heads = rows.shift().map(x => norm(x));
+    const idx = (...names) => heads.findIndex(h => names.includes(h));
+
+    const qi = idx("question", "pertanyaan", "soal");
+    const ai = idx("answer", "jawaban");
+    const ci = idx("category", "kategori");
+    const si = idx("source", "sumber");
+
+    if (qi < 0 || ai < 0) {
+      throw Error("Kolom wajib: question dan answer.");
+    }
+
+    const items = rows
+      .filter(r => r[qi]?.trim() && r[ai]?.trim())
+      .map(r => ({
+        question: r[qi].trim(),
+        answer: r[ai].trim(),
+        category: ci >= 0 ? (r[ci] || "").trim() : "",
+        source: si >= 0 ? (r[si] || "").trim() : "Import CSV"
+      }));
+
+    if (!items.length) {
+      throw Error("Tidak ada data pertanyaan yang valid.");
+    }
+
+    $("formStatus").textContent = "Mengimpor " + items.length + " data ke Supabase...";
+
+    const response = await fetch(
+      `${config.url}/rest/v1/qa_entries`,
+      {
+        method: "POST",
+        headers: {
+          apikey: config.key,
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation"
+        },
+        body: JSON.stringify(items)
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw Error(result.message || result.msg || "Gagal mengimpor ke Supabase.");
+    }
+
+    if (!Array.isArray(result) || result.length !== items.length) {
+      throw Error("Jumlah data yang tersimpan tidak sesuai.");
+    }
+
+    const mapped = result.map(item => ({
+      id: item.id,
+      question: item.question,
+      answer: item.answer,
+      category: item.category || "",
+      source: item.source || "Import CSV",
+      updatedAt: item.updated_at
+    }));
+
+    db = [...mapped, ...db.filter(
+      old => !mapped.some(item => item.id === old.id)
+    )];
+
+    persist();
+
+    $("formStatus").textContent =
+      `Berhasil! ${mapped.length} pertanyaan masuk ke Supabase.`;
+
+    search(lastQuery || items[0].question);
+
+  } catch (err) {
+    alert("Gagal impor CSV: " + err.message);
+    $("formStatus").textContent = "Impor CSV gagal.";
+  }
+
+  e.target.value = "";
+};
 $("sampleBtn").onclick=()=>{if(db.length&&!confirm("Tambahkan contoh ke database yang sudah ada?"))return;const samples=[
 {question:"Apa yang harus dilakukan sebelum memulai pekerjaan?",answer:"Ikuti prosedur kerja yang berlaku, pastikan area aman, dan gunakan alat pelindung diri yang diwajibkan.",category:"Safety",source:"Contoh demo"},
 {question:"Apa tindakan jika menemukan produk tidak sesuai standar kualitas?",answer:"Pisahkan produk yang tidak sesuai, laporkan kepada penanggung jawab, dan ikuti prosedur penanganan produk nonconforming.",category:"Quality",source:"Contoh demo"},
