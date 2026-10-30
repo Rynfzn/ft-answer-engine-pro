@@ -119,16 +119,35 @@ function search(q){
   if(!scored.length){$("results").innerHTML='<div class="empty">Belum ada hasil yang cocok.<br><small>Coba kata kunci lain atau tambahkan pertanyaan ke database.</small></div>';return}
   $("results").innerHTML=scored.map(x=>`<article class="result"><div class="resulttop"><span class="qid">${escapeHtml(x.id||"QUESTION")}</span><span class="score">${x.score}% MATCH</span></div><div class="question">${escapeHtml(x.question)}</div><div class="answer">${escapeHtml(x.answer)}</div><div class="tags">${x.category?`<span class="tag">${escapeHtml(x.category)}</span>`:""}${x.source?`<span class="tag">Sumber: ${escapeHtml(x.source)}</span>`:""}</div><div class="actions"><button class="btn secondary" onclick="editItem('${x.id}')">Edit</button><button class="btn ghost" onclick="copyAnswer('${x.id}')">Salin jawaban</button><button class="btn danger" onclick="deleteItem('${x.id}')">Hapus</button></div></article>`).join("");
 }
-window.editItem=id=>{const x=db.find(y=>y.id===id);if(!x)return;$("editId").value=x.id;$("questionInput").value=x.question;$("answerInput").value=x.answer;$("categoryInput").value=x.category||"";$("sourceInput").value=x.source||"";$("saveBtn").textContent="Perbarui Pertanyaan";$("questionInput").focus()};
+window.editItem = id => {
+  const session = window.ftAdminSession;
 
+  if (!session || !session.access_token) {
+    alert("Fitur edit hanya untuk admin. Silakan login terlebih dahulu.");
+    return;
+  }
+
+  const x = db.find(y => y.id === id);
+  if (!x) return;
+
+  $("editId").value = x.id;
+  $("questionInput").value = x.question;
+  $("answerInput").value = x.answer;
+  $("categoryInput").value = x.category || "";
+  $("sourceInput").value = x.source || "";
+  $("saveBtn").textContent = "Perbarui Pertanyaan";
+  $("questionInput").focus();
+};
 window.deleteItem = async id => {
-  if (!confirm("Yakin ingin menghapus pertanyaan ini dari database online?")) return;
-
   const config = window.ftSupabaseConfig;
   const session = window.ftAdminSession;
 
   if (!config || !session || !session.access_token) {
-    alert("Silakan login admin terlebih dahulu.");
+    alert("Fitur hapus hanya untuk admin. Silakan login terlebih dahulu.");
+    return;
+  }
+
+  if (!confirm("Yakin ingin menghapus pertanyaan ini dari database online?")) {
     return;
   }
 
@@ -161,7 +180,6 @@ window.deleteItem = async id => {
     search(lastQuery);
 
     alert("Berhasil! Data sudah dihapus dari Supabase.");
-
   } catch (error) {
     alert("Gagal menghapus: " + error.message);
   }
