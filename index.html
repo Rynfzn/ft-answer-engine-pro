@@ -307,6 +307,7 @@ $("importJsonBtn").onclick=()=>$("jsonFile").click();
 $("jsonFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const data=JSON.parse(await f.text());const arr=Array.isArray(data)?data:(data.questions||data.items||[]);if(!Array.isArray(arr))throw Error("Format JSON tidak dikenali");let added=0;arr.forEach(x=>{const question=x.question||x.pertanyaan||x.Question||x.soal;const answer=x.answer||x.jawaban||x.Answer;if(question&&answer){db.push({id:uid(),question:String(question),answer:String(answer),category:String(x.category||x.kategori||""),source:String(x.source||x.sumber||"")});added++}});persist();$("formStatus").textContent=`Impor selesai: ${added} pertanyaan.`;if(lastQuery)search(lastQuery)}catch(err){alert("Gagal impor JSON: "+err.message)}e.target.value=""};
 $("importCsvBtn").onclick=()=>$("csvFile").click();
 function parseCSV(text){const rows=[];let row=[],v="",quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'&&quoted&&text[i+1]==='"'){v+='"';i++}else if(c==='"'){quoted=!quoted}else if(c===","&&!quoted){row.push(v);v=""}else if((c==="\n"||c==="\r")&&!quoted){if(c==="\r"&&text[i+1]==="\n")i++;row.push(v);if(row.some(x=>x.trim()))rows.push(row);row=[];v=""}else v+=c}row.push(v);if(row.some(x=>x.trim()))rows.push(row);return rows}
+
 $("csvFile").onchange = async e => {
   const f = e.target.files[0];
   if (!f) return;
@@ -320,15 +321,19 @@ $("csvFile").onchange = async e => {
     return;
   }
 
+  let imported = [];
+
   try {
     const rows = parseCSV(await f.text());
 
     if (rows.length < 2) {
-      throw Error("CSV harus memiliki header dan setidaknya satu baris data.");
+      throw Error("CSV harus memiliki header dan data.");
     }
 
     const heads = rows.shift().map(x => norm(x));
-    const idx = (...names) => heads.findIndex(h => names.includes(h));
+    const idx = (...names) => heads.findIndex(
+      h => names.includes(h)
+    );
 
     const qi = idx("question", "pertanyaan", "soal");
     const ai = idx("answer", "jawaban");
@@ -349,74 +354,102 @@ $("csvFile").onchange = async e => {
       }));
 
     if (!items.length) {
-      throw Error("Tidak ada data pertanyaan yang valid.");
+      throw Error("Tidak ada data valid.");
     }
 
-    $("formStatus").textContent = "Mengimpor " + items.length + " data ke Supabase...";
+    const batchSize = 20;
+    const totalBatches = Math.ceil(items.length / batchSize);
 
-    const response = await fetch(
-      `${config.url}/rest/v1/qa_entries`,
-      {
-        method: "POST",
-        headers: {
-          apikey: config.key,
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-          Prefer: "return=representation"
-        },
-        body: JSON.stringify(items)
+    for (let i = 0; i < items.length; i += batchSize) {
+      const batch = items.slice(i, i + batchSize);
+      const batchNumber = Math.floor(i / batchSize) + 1;
+
+      $("formStatus").textContent =
+        `Mengimpor batch ${batchNumber}/${totalBatches}...`;
+
+      const response = await fetch(
+        `${config.url}/rest/v1/qa_entries`,
+        {
+          method: "POST",
+          headers: {
+            apikey: config.key,
+            Authorization: `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+            Prefer: "return=representation"
+          },
+          body: JSON.stringify(batch)
+        }
+      );
+
+      const responseText = await response.text();
+      console.log("STATUS IMPORT:", response.status);
+      console.log("RESPONS IMPORT:", responseText);
+
+      let result;
+
+      try {
+        result = responseText ? JSON.parse(responseText) : [];
+      } catch {
+        throw Error("Respons Supabase tidak valid.");
       }
-    );
 
-    const responseText = await response.text();
-console.log("STATUS IMPORT:", response.status);
-console.log("RESPONS IMPORT:", responseText);
+      if (!response.ok) {
+        throw Error(
+          `Batch ${batchNumber} gagal: HTTP ${response.status} - ` +
+          (result.message || result.msg || responseText)
+        );
+      }
 
-let result = [];
+      if (!Array.isArray(result) || result.length !== batch.length) {
+        throw Error(
+          `Batch ${batchNumber}: jumlah data tersimpan tidak sesuai.`
+        );
+      }
 
-try {
-  result = responseText ? JSON.parse(responseText) : [];
-} catch {
-  throw Error("Respons Supabase bukan JSON yang valid: " + responseText);
-}
+      const mapped = result.map(item => ({
+        id: item.id,
+        question: item.question,
+        answer: item.answer,
+        category: item.category || "",
+        source: item.source || "Import CSV",
+        updatedAt: item.updated_at
+      }));
 
-    if (!response.ok) {
-  throw Error(
-    "HTTP " + response.status + ": " + responseText
-  );
+      imported.push(...mapped);
     }
 
-    if (!Array.isArray(result) || result.length !== items.length) {
-      throw Error("Jumlah data yang tersimpan tidak sesuai.");
-    }
-
-    const mapped = result.map(item => ({
-      id: item.id,
-      question: item.question,
-      answer: item.answer,
-      category: item.category || "",
-      source: item.source || "Import CSV",
-      updatedAt: item.updated_at
-    }));
-
-    db = [...mapped, ...db.filter(
-      old => !mapped.some(item => item.id === old.id)
-    )];
-
+    db = [...imported, ...db];
     persist();
 
     $("formStatus").textContent =
-      `Berhasil! ${mapped.length} pertanyaan masuk ke Supabase.`;
+      `Berhasil! ${imported.length} pertanyaan masuk ke Supabase.`;
 
     search(lastQuery || items[0].question);
 
+    alert(
+      `Impor selesai!\n${imported.length} pertanyaan berhasil disimpan.`
+    );
+
   } catch (err) {
-    alert("Gagal impor CSV: " + err.message);
-    $("formStatus").textContent = "Impor CSV gagal.";
+    if (imported.length) {
+      db = [...imported, ...db];
+      persist();
+    }
+
+    $("formStatus").textContent =
+      `Impor terhenti. ${imported.length} data berhasil disimpan.`;
+
+    alert(
+      "Impor terhenti!\n" +
+      imported.length + " pertanyaan berhasil disimpan.\n" +
+      "Penyebab: " + err.message +
+      "\nJangan impor ulang seluruh file sebelum memeriksa data."
+    );
   }
 
   e.target.value = "";
 };
+
 $("sampleBtn").onclick=()=>{if(db.length&&!confirm("Tambahkan contoh ke database yang sudah ada?"))return;const samples=[
 {question:"Apa yang harus dilakukan sebelum memulai pekerjaan?",answer:"Ikuti prosedur kerja yang berlaku, pastikan area aman, dan gunakan alat pelindung diri yang diwajibkan.",category:"Safety",source:"Contoh demo"},
 {question:"Apa tindakan jika menemukan produk tidak sesuai standar kualitas?",answer:"Pisahkan produk yang tidak sesuai, laporkan kepada penanggung jawab, dan ikuti prosedur penanganan produk nonconforming.",category:"Quality",source:"Contoh demo"},
