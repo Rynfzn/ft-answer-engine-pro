@@ -120,7 +120,53 @@ function search(q){
   $("results").innerHTML=scored.map(x=>`<article class="result"><div class="resulttop"><span class="qid">${escapeHtml(x.id||"QUESTION")}</span><span class="score">${x.score}% MATCH</span></div><div class="question">${escapeHtml(x.question)}</div><div class="answer">${escapeHtml(x.answer)}</div><div class="tags">${x.category?`<span class="tag">${escapeHtml(x.category)}</span>`:""}${x.source?`<span class="tag">Sumber: ${escapeHtml(x.source)}</span>`:""}</div><div class="actions"><button class="btn secondary" onclick="editItem('${x.id}')">Edit</button><button class="btn ghost" onclick="copyAnswer('${x.id}')">Salin jawaban</button><button class="btn danger" onclick="deleteItem('${x.id}')">Hapus</button></div></article>`).join("");
 }
 window.editItem=id=>{const x=db.find(y=>y.id===id);if(!x)return;$("editId").value=x.id;$("questionInput").value=x.question;$("answerInput").value=x.answer;$("categoryInput").value=x.category||"";$("sourceInput").value=x.source||"";$("saveBtn").textContent="Perbarui Pertanyaan";$("questionInput").focus()};
-window.deleteItem=id=>{if(!confirm("Hapus pertanyaan ini?"))return;db=db.filter(x=>x.id!==id);persist();search(lastQuery)};
+
+window.deleteItem = async id => {
+  if (!confirm("Yakin ingin menghapus pertanyaan ini dari database online?")) return;
+
+  const config = window.ftSupabaseConfig;
+  const session = window.ftAdminSession;
+
+  if (!config || !session || !session.access_token) {
+    alert("Silakan login admin terlebih dahulu.");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${config.url}/rest/v1/qa_entries?id=eq.${encodeURIComponent(id)}`,
+      {
+        method: "DELETE",
+        headers: {
+          apikey: config.key,
+          Authorization: `Bearer ${session.access_token}`,
+          Prefer: "return=representation"
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Gagal menghapus data Supabase.");
+    }
+
+    const deleted = await response.json();
+
+    if (!Array.isArray(deleted) || deleted.length === 0) {
+      throw new Error("Data tidak terhapus. Periksa izin database.");
+    }
+
+    db = db.filter(x => x.id !== id);
+    persist();
+    search(lastQuery);
+
+    alert("Berhasil! Data sudah dihapus dari Supabase.");
+
+  } catch (error) {
+    alert("Gagal menghapus: " + error.message);
+  }
+};
+
 window.copyAnswer=async id=>{const x=db.find(y=>y.id===id);if(!x)return;try{await navigator.clipboard.writeText(x.answer);$("formStatus").textContent="Jawaban berhasil disalin."}catch(e){prompt("Salin jawaban berikut:",x.answer)}};
 $("searchBtn").onclick=()=>search($("query").value);
 $("query").addEventListener("keydown",e=>{if(e.key==="Enter")search($("query").value)});
