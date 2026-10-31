@@ -607,6 +607,7 @@ localStorage.setItem(
     }
   } catch (error) {
     console.error("Supabase:", error);
+    alert("ERROR SUPABASE: " + error.message);
     console.log("Aplikasi tetap menggunakan data lokal.");
     }
 })();
