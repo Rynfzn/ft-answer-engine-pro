@@ -551,7 +551,6 @@ while (true) {
     }
   );
   
-alert("RESPONS SUPABASE: " + response.status);
   
   if (!response.ok) {
     throw new Error(
@@ -560,6 +559,7 @@ alert("RESPONS SUPABASE: " + response.status);
   }
 
   const batch = await response.json();
+  console.log("Batch:", start, "Jumlah:", batch.length);
   onlineData.push(...batch);
 
   if (batch.length < pageSize) {
