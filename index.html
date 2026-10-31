@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#090d18">
 <title>FT Answer Engine PRO</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{--bg:#090d18;--panel:#111827;--panel2:#0d1422;--line:#243047;--text:#edf2ff;--muted:#9aa8c2;--accent:#dc2626;--accent2:#ef4444;--green:#34d399;--red:#fb7185;--shadow:0 18px 55px #0005}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top right,#18234a 0,transparent 42%),var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
@@ -110,13 +111,15 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;ma
     <div class="toolrow">
       <button class="btn secondary" id="importJsonBtn">Impor JSON</button>
       <button class="btn secondary" id="importCsvBtn">Impor CSV</button>
+      <button class="btn secondary" id="importXlsxBtn">Impor Excel (.xlsx)</button>
       <button class="btn secondary" id="exportBtn">Ekspor Backup</button>
       <button class="btn ghost" id="sampleBtn">Muat Contoh</button>
       <button class="btn danger" id="deleteAllBtn">Hapus Semua</button>
     </div>
     <input id="jsonFile" type="file" accept=".json,application/json" class="hidden">
     <input id="csvFile" type="file" accept=".csv,text/csv" class="hidden">
-    <p class="hint">CSV menggunakan kolom <b>question, answer, category, source</b>. Impor Excel (.xlsx) dan ekstraksi PDF disiapkan untuk tahap integrasi berikutnya.</p>
+    <input id="xlsxFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
+    <p class="hint">Impor Excel langsung dari HP/komputer: gunakan header <b>QUESTION</b> dan <b>ANSWER</b>. Kolom CATEGORY dan SOURCE opsional. Data dikirim bertahap ke Supabase.</p>
     <p class="hint">Data disimpan di browser/perangkat ini. Ekspor backup secara berkala agar data aman.</p>
   </aside>
 </div>
@@ -528,6 +531,56 @@ $("csvFile").onchange = async e => {
   e.target.value = "";
 };
 
+$("importXlsxBtn").onclick=()=>$("xlsxFile").click();
+$("xlsxFile").onchange=async e=>{
+  const file=e.target.files[0];
+  if(!file)return;
+  const config=window.ftSupabaseConfig;
+  const session=window.ftAdminSession;
+  let imported=[];
+  try{
+    if(!window.XLSX)throw Error("Library pembaca Excel belum termuat. Periksa koneksi internet lalu muat ulang halaman.");
+    if(!config||!session||!session.access_token)throw Error("Silakan login admin terlebih dahulu.");
+    if(!window.ftSupabaseOnline)throw Error("Koneksi database belum selesai. Tunggu sampai jumlah data tampil, lalu coba lagi.");
+    const buffer=await file.arrayBuffer();
+    const workbook=XLSX.read(buffer,{type:"array"});
+    const sheet=workbook.Sheets[workbook.SheetNames[0]];
+    if(!sheet)throw Error("Sheet Excel tidak ditemukan.");
+    const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:"",raw:false});
+    if(rows.length<2)throw Error("Excel harus memiliki header dan minimal satu baris data.");
+    const heads=rows.shift().map(x=>norm(x));
+    const qi=heads.indexOf("question"), ai=heads.indexOf("answer");
+    const ci=heads.indexOf("category"), si=heads.indexOf("source");
+    if(qi<0||ai<0)throw Error("Header wajib: QUESTION dan ANSWER.");
+    const items=rows.filter(r=>String(r[qi]||"").trim()&&String(r[ai]||"").trim()).map(r=>({
+      question:String(r[qi]).trim(),answer:String(r[ai]).trim(),
+      category:ci>=0?String(r[ci]||"").trim():"",
+      source:si>=0?String(r[si]||"").trim():"Import Excel"
+    }));
+    if(!items.length)throw Error("Tidak ada baris valid. Pastikan kolom QUESTION dan ANSWER terisi.");
+    const batchSize=20,totalBatches=Math.ceil(items.length/batchSize);
+    for(let i=0;i<items.length;i+=batchSize){
+      const batch=items.slice(i,i+batchSize),batchNo=Math.floor(i/batchSize)+1;
+      $("formStatus").textContent=`Mengimpor Excel: batch ${batchNo}/${totalBatches} (${imported.length}/${items.length})...`;
+      const response=await fetch(`${config.url}/rest/v1/qa_entries`,{method:"POST",headers:{apikey:config.key,Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(batch)});
+      const responseText=await response.text();let result;
+      try{result=responseText?JSON.parse(responseText):[]}catch{throw Error("Respons Supabase tidak valid.")}
+      if(!response.ok)throw Error(`Batch ${batchNo} gagal: HTTP ${response.status} - ${(result.message||result.msg||responseText)}`);
+      if(!Array.isArray(result)||result.length!==batch.length)throw Error(`Batch ${batchNo}: jumlah data tersimpan tidak sesuai.`);
+      imported.push(...result.map(item=>({id:item.id,question:item.question,answer:item.answer,category:item.category||"",source:item.source||"Import Excel",updatedAt:item.updated_at})));
+      db=[...imported,...db];renderStats();
+    }
+    $("formStatus").textContent=`Impor Excel berhasil: ${imported.length} data ditambahkan.`;
+    search(lastQuery||items[0].question);
+    alert(`Impor Excel selesai! ${imported.length} data berhasil disimpan ke Supabase.`);
+  }catch(err){
+    if(imported.length){db=[...imported,...db];renderStats();}
+    $("formStatus").textContent=`Impor berhenti. ${imported.length} data berhasil disimpan.`;
+    alert(`Impor Excel terhenti. ${imported.length} data berhasil tersimpan.\nPenyebab: ${err.message}\nJangan impor ulang seluruh file sebelum memeriksa data.`);
+  }
+  e.target.value="";
+};
+
 $("sampleBtn").onclick=()=>{if(db.length&&!confirm("Tambahkan contoh ke database yang sudah ada?"))return;const samples=[
 {question:"Apa yang harus dilakukan sebelum memulai pekerjaan?",answer:"Ikuti prosedur kerja yang berlaku, pastikan area aman, dan gunakan alat pelindung diri yang diwajibkan.",category:"Safety",source:"Contoh demo"},
 {question:"Apa tindakan jika menemukan produk tidak sesuai standar kualitas?",answer:"Pisahkan produk yang tidak sesuai, laporkan kepada penanggung jawab, dan ikuti prosedur penanganan produk nonconforming.",category:"Quality",source:"Contoh demo"},
@@ -540,7 +593,7 @@ load();
 </script><script>
 (async function connectSupabase() {
   const SUPABASE_URL = "https://axellcuclfrelwimiqgc.supabase.co" ;
-  const SUPABASE_KEY = "sb_publishable_BvQDLKdvZMm-HhhXK47kHg_d8bNUPmx" ;
+  const SUPABASE_KEY = "ISI_KEY" ;
 window.ftSupabaseConfig = {
   url: SUPABASE_URL,
   key: SUPABASE_KEY
@@ -571,20 +624,12 @@ while (true) {
   const batch = await response.json();
 onlineData.push(...batch);
 
-if (start % 5000 === 0 || batch.length < pageSize) {
-  alert(
-    "Proses: " + (start + batch.length) +
-    " data diterima"
-  );
-}
-
   if (batch.length < pageSize) {
     break;
   }
 
   start += pageSize;
 }
-alert("Pagination selesai. Data diterima: " + onlineData.length);   
 
     const mappedData = onlineData.map(item => ({
       id: item.id,
@@ -602,14 +647,12 @@ alert("Pagination selesai. Data diterima: " + onlineData.length);
     renderStats();
 
     console.log("Supabase berhasil terhubung:", onlineData.length);
-    alert("Supabase terhubung. Data dimuat: " + onlineData.length);
 
     if (typeof search === "function" && lastQuery) {
       search(lastQuery);
     }
   } catch (error) {
     console.error("Supabase:", error);
-    alert("ERROR SUPABASE: " + error.message);
     console.log("Aplikasi tetap menggunakan data lokal.");
     }
 })();
@@ -617,7 +660,7 @@ alert("Pagination selesai. Data diterima: " + onlineData.length);
 <script>
 (function () {
   const SUPABASE_URL = "https://axellcuclfrelwimiqgc.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_BvQDLKdvZMm-HhhXK47kHg_d8bNUPmx";
+  const SUPABASE_KEY = "ISI_KEY";
 
   const loginPanel = document.getElementById("adminLoginPanel");
   const managePanel = document.getElementById("adminManagePanel");
