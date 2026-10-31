@@ -559,8 +559,14 @@ while (true) {
   }
 
   const batch = await response.json();
-  console.log("Batch:", start, "Jumlah:", batch.length);
-  onlineData.push(...batch);
+onlineData.push(...batch);
+
+if (start % 5000 === 0 || batch.length < pageSize) {
+  alert(
+    "Proses: " + (start + batch.length) +
+    " data diterima"
+  );
+}
 
   if (batch.length < pageSize) {
     break;
