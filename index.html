@@ -550,7 +550,9 @@ while (true) {
       }
     }
   );
-
+  
+alert("RESPONS SUPABASE: " + response.status);
+  
   if (!response.ok) {
     throw new Error(
       "Koneksi database gagal: " + response.status
