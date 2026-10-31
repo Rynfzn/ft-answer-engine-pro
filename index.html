@@ -608,8 +608,8 @@ localStorage.setItem(
   } catch (error) {
     console.error("Supabase:", error);
     console.log("Aplikasi tetap menggunakan data lokal.");
-  }
-}
+    }
+})();
 </script>
 <script>
 (function () {
@@ -747,7 +747,6 @@ localStorage.setItem(
   restoreSession();
 alert("TES SCRIPT BERJALAN");
 alert("TES SEBELUM CONNECT SUPABASE");
-connectSupabase();
 })();
 </script>
 </body>
