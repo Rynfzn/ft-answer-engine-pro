@@ -596,7 +596,7 @@ localStorage.setItem(
   JSON.stringify(combined)
 );
     console.log("Supabase berhasil terhubung!");
-    console.log("Data online:", onlineData.length);
+    alert("Jumlah data berhasil diambil dari Supabase: " + onlineData.length);
 
     if (typeof load === "function") {
       load();
