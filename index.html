@@ -165,58 +165,78 @@ function similarity(a,b){
 }
 function escapeHtml(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
+let searchIndex = [];
+let indexedDbRef = null;
+
+function rebuildSearchIndex(){
+  searchIndex = db.map(item => {
+    const question = norm(item.question);
+    const category = norm(item.category || "");
+    return {item, question, category,
+      questionTokens:new Set(tokens(question)),
+      categoryTokens:new Set(tokens(category))};
+  });
+  indexedDbRef = db;
+}
+
+function scoreIndexed(queryNorm, queryTokens, targetNorm, targetTokens){
+  if(!queryNorm || !targetNorm) return 0;
+  if(queryNorm === targetNorm) return 100;
+  if(!queryTokens.size || !targetTokens.size) return 0;
+  let overlap = 0;
+  for(const token of queryTokens) if(targetTokens.has(token)) overlap++;
+  if(!overlap) return 0;
+  const j = overlap/(queryTokens.size+targetTokens.size-overlap);
+  const c = overlap/Math.min(queryTokens.size,targetTokens.size);
+  const phrase = targetNorm.includes(queryNorm)||queryNorm.includes(targetNorm)?0.18:0;
+  return Math.min(99,Math.round((j*.65+c*.35+phrase)*100));
+}
+
 function search(q){
   lastQuery=q.trim();
   $("query").value=q;
   $("results").innerHTML="";
-
   if(!q.trim()){
     $("results").innerHTML='<div class="empty">Masukkan kata kunci atau pertanyaan untuk mulai mencari.</div>';
     $("resultStat").textContent="0";
     $("resultLabel").textContent="Siap mencari";
     return;
   }
+  if(indexedDbRef !== db) rebuildSearchIndex();
 
-  const scored=db
-    .map(item=>({
-      ...item,
-      score:Math.max(
-        similarity(q,item.question),
-        similarity(q,item.category||"")*0.55
-      )
-    }))
-    .filter(x=>x.score>=70)
-    .sort((a,b)=>b.score-a.score)
-    .slice(0,50);
-
-  $("resultStat").textContent=scored.length;
-  $("resultLabel").textContent=scored.length+" hasil";
-
-  if(!scored.length){
+  const queryNorm=norm(q);
+  const queryTokens=new Set(tokens(queryNorm));
+  const scored=[];
+  for(const entry of searchIndex){
+    const qs=scoreIndexed(queryNorm,queryTokens,entry.question,entry.questionTokens);
+    const cs=scoreIndexed(queryNorm,queryTokens,entry.category,entry.categoryTokens)*.55;
+    const score=Math.max(qs,cs);
+    if(score>=70) scored.push({item:entry.item,score});
+  }
+  scored.sort((a,b)=>b.score-a.score);
+  const results=scored.slice(0,50);
+  $("resultStat").textContent=results.length;
+  $("resultLabel").textContent=results.length+" hasil";
+  if(!results.length){
     $("results").innerHTML='<div class="empty">Belum ada jawaban dengan tingkat kecocokan minimal 70%.<br><small>Coba gunakan kata kunci yang lebih spesifik.</small></div>';
     return;
   }
-
-  $("results").innerHTML = scored.map(x => `
+  $("results").innerHTML=results.map(({item:x,score})=>`
     <article class="result">
       <div class="resulttop">
-        <span class="qid">${escapeHtml(x.id || "QUESTION")}</span>
-        <span class="score">${x.score}% MATCH</span>
+        <span class="qid">${escapeHtml(x.id||"QUESTION")}</span>
+        <span class="score">${score}% MATCH</span>
       </div>
       <div class="question">${escapeHtml(x.question)}</div>
       <div class="answer">${escapeHtml(x.answer)}</div>
       <div class="tags">
-        ${x.category ? `<span class="tag">${escapeHtml(x.category)}</span>` : ""}
-        ${x.source ? `<span class="tag">Sumber: ${escapeHtml(x.source)}</span>` : ""}
+        ${x.category?`<span class="tag">${escapeHtml(x.category)}</span>`:""}
+        ${x.source?`<span class="tag">Sumber: ${escapeHtml(x.source)}</span>`:""}
       </div>
       <div class="actions">
-        ${window.ftAdminSession && window.ftAdminSession.access_token
-          ? `<button class="btn secondary" onclick="editItem('${x.id}')">Edit</button>`
-          : ""}
+        ${window.ftAdminSession&&window.ftAdminSession.access_token?`<button class="btn secondary" onclick="editItem('${x.id}')">Edit</button>`:""}
         <button class="btn ghost" onclick="copyAnswer('${x.id}')">Salin jawaban</button>
-        ${window.ftAdminSession && window.ftAdminSession.access_token
-          ? `<button class="btn danger" onclick="deleteItem('${x.id}')">Hapus</button>`
-          : ""}
+        ${window.ftAdminSession&&window.ftAdminSession.access_token?`<button class="btn danger" onclick="deleteItem('${x.id}')">Hapus</button>`:""}
       </div>
     </article>
   `).join("");
@@ -605,7 +625,7 @@ let start = 0;
 
 while (true) {
   const response = await fetch(
-    `${SUPABASE_URL}/rest/v1/qa_entries?select=id,question,answer,category,source,created_at,updated_at&order=id.asc&limit=${pageSize}&offset=${start}`,
+    `${SUPABASE_URL}/rest/v1/qa_entries?select=id,question,answer,category,source,updated_at&order=id.asc&limit=${pageSize}&offset=${start}`,
     {
       headers: {
         apikey: SUPABASE_KEY,
